@@ -9,11 +9,38 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: var(--tg-theme-bg-color, #1a1a2e);
+    background: linear-gradient(135deg, #0f0c29, #302b63, #1a1a4e, #0d2137);
+    background-size: 400% 400%;
+    animation: bg-shift 10s ease infinite;
     color: var(--tg-theme-text-color, #ffffff);
     min-height: 100vh;
     overflow-x: hidden;
+    position: relative;
   }
+  @keyframes bg-shift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  #bg-symbols {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 0; overflow: hidden;
+  }
+  .bg-sym {
+    position: absolute;
+    font-size: 32px;
+    opacity: 0;
+    animation: float-up linear infinite;
+    user-select: none;
+  }
+  @keyframes float-up {
+    0%   { transform: translateY(110vh) rotate(0deg); opacity: 0; }
+    8%   { opacity: 0.12; }
+    92%  { opacity: 0.12; }
+    100% { transform: translateY(-120px) rotate(360deg); opacity: 0; }
+  }
+  .tabs { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(10px); }
+  .page { position: relative; z-index: 1; }
 
   /* TABS */
   .tabs {
@@ -201,6 +228,30 @@
   }
   .restart-btn:hover { background: rgba(255,255,255,0.15); }
 
+  .search-btn {
+    width: 100%; padding: 14px; border-radius: 14px; font-size: 16px; font-weight: 700;
+    background: linear-gradient(135deg, #43e97b, #38f9d7);
+    border: none; color: #1a1a2e; cursor: pointer; transition: transform 0.1s;
+  }
+  .search-btn:active { transform: scale(0.97); }
+  .cancel-btn {
+    padding: 10px 24px; border-radius: 10px; font-size: 14px; cursor: pointer;
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.15);
+    color: rgba(255,255,255,0.6);
+  }
+  .leave-btn {
+    padding: 10px 24px; border-radius: 10px; font-size: 14px; cursor: pointer;
+    background: rgba(255,80,80,0.1); border: 1px solid rgba(255,80,80,0.3);
+    color: #ff6060;
+  }
+  .searching-text {
+    color: rgba(255,255,255,0.5); font-size: 15px; text-align: center; margin-bottom: 12px;
+  }
+  #online-lobby {
+    flex-direction: column; align-items: center; gap: 14px;
+    width: 100%; max-width: 320px;
+  }
+
   /* CONFETTI */
   .confetti-wrap {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -217,6 +268,8 @@
 </style>
 </head>
 <body>
+
+<div id="bg-symbols"></div>
 
 <div class="tabs">
   <div class="tab active" onclick="showTab('casino')">🎰 Казино</div>
@@ -276,6 +329,7 @@
     <div class="ttt-mode">
       <button class="mode-btn active" id="mode-ai" onclick="setMode('ai')">🤖 Vs ИИ</button>
       <button class="mode-btn" id="mode-2p" onclick="setMode('2p')">👥 2 игрока</button>
+      <button class="mode-btn" id="mode-ol" onclick="setMode('online')">🌐 Онлайн</button>
     </div>
 
     <div class="ttt-scores">
@@ -307,7 +361,18 @@
       <div class="cell" onclick="cellClick(8)"></div>
     </div>
 
-    <button class="restart-btn" onclick="restartGame()">🔄 Новая игра</button>
+    <div id="online-lobby" style="display:none">
+      <div id="ol-idle">
+        <button class="search-btn" onclick="startSearch()">🔍 Найти соперника</button>
+      </div>
+      <div id="ol-searching" style="display:none; text-align:center;">
+        <p class="searching-text">🔍 Ищем соперника<span id="ol-dots"></span></p>
+        <button class="cancel-btn" onclick="cancelSearch()">❌ Отменить</button>
+      </div>
+    </div>
+
+    <button class="restart-btn" id="restart-btn" onclick="restartGame()">🔄 Новая игра</button>
+    <button class="leave-btn" id="leave-btn" style="display:none" onclick="leaveOnlineGame()">🏳️ Покинуть игру</button>
   </div>
 </div>
 
@@ -384,8 +449,7 @@ async function doSpin() {
   if (s[0]===s[1] && s[1]===s[2]) {
     result.className = 'casino-result jackpot';
     result.textContent = '🏆 ДЖЕКПОТ! ВСЕ СОВПАЛИ!';
-    jackpots++; wins++;
-    document.getElementById('stat-wins').textContent = wins;
+    jackpots++;
     document.getElementById('stat-jackpots').textContent = jackpots;
     spawnConfetti();
     if (window.Telegram?.WebApp) Telegram.WebApp.HapticFeedback.notificationOccurred('success');
@@ -413,10 +477,13 @@ let scores = { X: 0, O: 0, draw: 0 };
 const WIN_LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 
 function setMode(m) {
+  if (mode === 'online') olCleanup();
   mode = m;
   document.getElementById('mode-ai').classList.toggle('active', m==='ai');
   document.getElementById('mode-2p').classList.toggle('active', m==='2p');
-  document.getElementById('o-label').textContent = m==='ai' ? '🤖 ИИ' : '⭕ Игрок 2';
+  document.getElementById('mode-ol').classList.toggle('active', m==='online');
+  document.getElementById('o-label').textContent = m==='ai' ? '🤖 ИИ' : m==='2p' ? '⭕ Игрок 2' : '⭕ Соперник';
+  olSetState(m === 'online' ? 'idle' : null);
   restartGame();
 }
 
@@ -555,6 +622,195 @@ function spawnConfetti() {
     el.addEventListener('animationend', () => el.remove());
   }
 }
+
+// ==================== ONLINE MODE ====================
+// Требует Firebase Realtime Database:
+// 1. firebase.google.com → Создать проект → Realtime Database → Тестовый режим
+// 2. Скопируй URL базы (вида https://ИМЯ-default-rtdb.firebaseio.com)
+// 3. Вставь ниже вместо YOUR_FIREBASE_URL:
+const FB_URL = 'https://game-57764-default-rtdb.firebaseio.com';
+
+let myUid = null, myName = 'Игрок';
+let olGameId = null, olSymbol = null, olGameData = null;
+let olPollTimer = null, olDotsTimer = null;
+
+function olInitUser() {
+  const u = window.Telegram?.WebApp?.initDataUnsafe?.user;
+  myUid = u ? String(u.id) : 'anon_' + Math.random().toString(36).slice(2, 9);
+  myName = u?.first_name || 'Игрок';
+}
+
+async function fbReq(method, path, data) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (data !== undefined) opts.body = JSON.stringify(data);
+  try {
+    const r = await fetch(`${FB_URL}${path}.json`, opts);
+    return r.ok ? r.json() : null;
+  } catch { return null; }
+}
+
+function olSetState(state) {
+  const isOnline = mode === 'online';
+  // lobby UI
+  document.getElementById('online-lobby').style.display = (isOnline && state !== 'ingame') ? 'flex' : 'none';
+  document.getElementById('ol-idle').style.display = state === 'idle' ? 'block' : 'none';
+  document.getElementById('ol-searching').style.display = state === 'searching' ? 'flex' : 'none';
+  // board & buttons
+  document.getElementById('board').style.display = (!isOnline || state === 'ingame') ? 'grid' : 'none';
+  document.getElementById('restart-btn').style.display = !isOnline ? 'block' : 'none';
+  document.getElementById('leave-btn').style.display = (isOnline && state === 'ingame') ? 'block' : 'none';
+}
+
+async function startSearch() {
+  if (FB_URL.includes('YOUR_FIREBASE_URL')) {
+    alert('Настройте Firebase: замените YOUR_FIREBASE_URL в коде mini_app.html'); return;
+  }
+  olInitUser();
+  olSetState('searching');
+  olStartDots();
+
+  const lobby = await fbReq('GET', '/lobby') || {};
+  const now = Date.now();
+  let opp = null;
+  for (const [uid, d] of Object.entries(lobby)) {
+    if (uid !== myUid && now - (d.ts || 0) < 30000 && !d.gid) { opp = { uid, ...d }; break; }
+  }
+
+  if (opp) {
+    const gid = opp.uid + '_' + myUid;
+    olGameData = { board: Array(9).fill(null), turn: 'X', px: opp.uid, po: myUid, nx: opp.name || 'Игрок', no: myName, status: 'playing' };
+    await fbReq('PUT', '/games/' + gid, olGameData);
+    await fbReq('PUT', '/lobby/' + opp.uid + '/gid', gid);
+    olJoinGame(gid, 'O');
+  } else {
+    await fbReq('PUT', '/lobby/' + myUid, { name: myName, ts: now });
+    olPollTimer = setInterval(async () => {
+      const entry = await fbReq('GET', '/lobby/' + myUid);
+      if (entry?.gid) {
+        clearInterval(olPollTimer);
+        await fbReq('DELETE', '/lobby/' + myUid);
+        olJoinGame(entry.gid, 'X');
+      }
+    }, 1500);
+  }
+}
+
+function olJoinGame(gid, symbol) {
+  olGameId = gid; olSymbol = symbol;
+  olStopDots();
+  olSetState('ingame');
+  restartGame();
+  olPollTimer = setInterval(async () => {
+    const data = await fbReq('GET', '/games/' + olGameId);
+    if (data) olSync(data);
+    else olSetState('idle');
+  }, 1500);
+}
+
+function olSync(data) {
+  olGameData = data;
+  board = data.board || Array(9).fill(null);
+  currentPlayer = data.turn || 'X';
+  gameOver = data.status !== 'playing';
+
+  const cells = document.getElementById('board').children;
+  Array.from(cells).forEach((cell, i) => {
+    const v = board[i];
+    cell.textContent = v === 'X' ? '❌' : v === 'O' ? '⭕' : '';
+    cell.className = 'cell' + (v ? ` taken ${v==='X'?'x-cell':'o-cell'}` : '');
+    cell.onclick = () => olCellClick(i);
+  });
+
+  const oppName = olSymbol === 'X' ? data.no : data.nx;
+
+  if (data.status !== 'playing') {
+    clearInterval(olPollTimer);
+    if (!data.winner) {
+      document.getElementById('ttt-status').innerHTML = '🤝 <span class="highlight">Ничья!</span>';
+      scores.draw++; document.getElementById('score-draw').textContent = scores.draw;
+    } else if (data.winner === olSymbol) {
+      document.getElementById('ttt-status').innerHTML = '🏆 <span class="highlight">Ты победил!</span>';
+      scores[olSymbol]++; document.getElementById('score-' + olSymbol.toLowerCase()).textContent = scores[olSymbol];
+      spawnConfetti();
+    } else {
+      const oSym = olSymbol === 'X' ? 'O' : 'X';
+      document.getElementById('ttt-status').innerHTML = `😔 Победил <span class="highlight">${oppName}</span>`;
+      scores[oSym]++; document.getElementById('score-' + oSym.toLowerCase()).textContent = scores[oSym];
+    }
+    if (data.winLine) data.winLine.forEach(i => cells[i].classList.add('win-cell'));
+    olSetState('ingame');
+    return;
+  }
+
+  const myTurn = data.turn === olSymbol;
+  document.getElementById('ttt-status').innerHTML = myTurn
+    ? `Твой ход <span class="highlight">${olSymbol==='X'?'❌':'⭕'}</span>`
+    : `⏳ Ход <span class="highlight">${oppName}</span>...`;
+  updateScoreHighlight();
+}
+
+async function olCellClick(idx) {
+  if (!olGameData || olGameData.status !== 'playing') return;
+  if (board[idx] || currentPlayer !== olSymbol) return;
+  if (window.Telegram?.WebApp) Telegram.WebApp.HapticFeedback.impactOccurred('light');
+
+  const nb = [...board]; nb[idx] = olSymbol;
+  let winner = null, winLine = null;
+  for (const [a, b, c] of WIN_LINES) {
+    if (nb[a] && nb[a]===nb[b] && nb[b]===nb[c]) { winner = nb[a]; winLine = [a,b,c]; break; }
+  }
+  const isDraw = !winner && nb.every(Boolean);
+  const newData = { ...olGameData, board: nb, turn: olSymbol==='X'?'O':'X', status: (winner||isDraw)?'finished':'playing', winner: winner||null, winLine };
+  await fbReq('PUT', '/games/' + olGameId, newData);
+  olSync(newData);
+}
+
+async function cancelSearch() {
+  clearInterval(olPollTimer); olPollTimer = null;
+  olStopDots();
+  if (myUid) await fbReq('DELETE', '/lobby/' + myUid);
+  olSetState('idle');
+}
+
+async function leaveOnlineGame() {
+  clearInterval(olPollTimer); olPollTimer = null;
+  if (olGameId) { await fbReq('DELETE', '/games/' + olGameId).catch(()=>{}); olGameId = null; }
+  olSymbol = null; olGameData = null;
+  olSetState('idle');
+  restartGame();
+}
+
+function olCleanup() {
+  clearInterval(olPollTimer); olPollTimer = null;
+  olStopDots();
+  if (myUid) fbReq('DELETE', '/lobby/' + myUid).catch(()=>{});
+}
+
+function olStartDots() {
+  let n = 0;
+  const el = document.getElementById('ol-dots');
+  olDotsTimer = setInterval(() => { if (el) el.textContent = '.'.repeat(n++ % 3 + 1); }, 500);
+}
+function olStopDots() { clearInterval(olDotsTimer); olDotsTimer = null; }
+
+// ==================== ANIMATED BACKGROUND ====================
+(function() {
+  const wrap = document.getElementById('bg-symbols');
+  const syms = ['🍒','🍋','🍊','🍇','⭐','💎','7️⃣','🎰','🃏','🎲'];
+  for (let i = 0; i < 18; i++) {
+    const el = document.createElement('div');
+    el.className = 'bg-sym';
+    el.textContent = syms[Math.floor(Math.random() * syms.length)];
+    const size = 22 + Math.random() * 28;
+    el.style.cssText = `
+      font-size: ${size}px;
+      left: ${Math.random() * 100}%;
+      animation-duration: ${10 + Math.random() * 14}s;
+      animation-delay: ${-Math.random() * 16}s;
+    `;
+    wrap.appendChild(el);
+  }
+})();
 
 // Init Telegram WebApp
 if (window.Telegram?.WebApp) {
