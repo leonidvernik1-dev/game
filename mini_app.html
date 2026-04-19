@@ -424,9 +424,21 @@ async function doSpin() {
 
   // Pick result with weights
   const r = Math.random();
-  let s = [randSym(), randSym(), randSym()];
-  if (r < 0.15) { s[0] = s[1] = s[2] = randSym(); }           // 15% jackpot
-  else if (r < 0.45) { s[1] = s[0] = randSym(); s[2] = randSym(); while(s[2]===s[0]) s[2]=randSym(); } // 30% two
+  let s;
+  if (r < 0.15) {
+    const sym = randSym();
+    s = [sym, sym, sym];
+  } else if (r < 0.45) {
+    const sym = randSym();
+    let other = randSym(); while (other === sym) other = randSym();
+    const pos = Math.floor(Math.random() * 3);
+    if (pos === 0) s = [sym, sym, other];
+    else if (pos === 1) s = [other, sym, sym];
+    else s = [sym, other, sym];
+  } else {
+    do { s = [randSym(), randSym(), randSym()]; }
+    while (s[0]===s[1] || s[1]===s[2] || s[0]===s[2]);
+  }
 
   // Start all reels spinning
   const r0 = spinReel(0);
