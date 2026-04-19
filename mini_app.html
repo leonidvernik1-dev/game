@@ -743,7 +743,8 @@ function olSync(data) {
       document.getElementById('ttt-status').innerHTML = '🤝 <span class="highlight">Ничья!</span>';
       scores.draw++; document.getElementById('score-draw').textContent = scores.draw;
     } else if (data.winner === olSymbol) {
-      document.getElementById('ttt-status').innerHTML = '🏆 <span class="highlight">Ты победил!</span>';
+      const msg = data.left ? '🏆 Соперник покинул игру. <span class="highlight">Ты победил!</span>' : '🏆 <span class="highlight">Ты победил!</span>';
+      document.getElementById('ttt-status').innerHTML = msg;
       scores[olSymbol]++; document.getElementById('score-' + olSymbol.toLowerCase()).textContent = scores[olSymbol];
       spawnConfetti();
     } else {
@@ -753,6 +754,16 @@ function olSync(data) {
     }
     if (data.winLine) data.winLine.forEach(i => cells[i].classList.add('win-cell'));
     olSetState('ingame');
+    const leaveBtn = document.getElementById('leave-btn');
+    leaveBtn.textContent = '🔍 Найти нового соперника';
+    leaveBtn.onclick = () => {
+      olGameId = null; olSymbol = null; olGameData = null;
+      const lb = document.getElementById('leave-btn');
+      lb.textContent = '🏳️ Покинуть игру';
+      lb.onclick = leaveOnlineGame;
+      olSetState('idle');
+      restartGame();
+    };
     return;
   }
 
@@ -788,8 +799,11 @@ async function cancelSearch() {
 
 async function leaveOnlineGame() {
   clearInterval(olPollTimer); olPollTimer = null;
-  if (olGameId) { await fbReq('DELETE', '/games/' + olGameId).catch(()=>{}); olGameId = null; }
-  olSymbol = null; olGameData = null;
+  if (olGameId && olGameData?.status === 'playing') {
+    const oppSym = olSymbol === 'X' ? 'O' : 'X';
+    await fbReq('PUT', '/games/' + olGameId, { ...olGameData, status: 'finished', winner: oppSym, left: true }).catch(() => {});
+  }
+  olGameId = null; olSymbol = null; olGameData = null;
   olSetState('idle');
   restartGame();
 }
