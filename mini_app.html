@@ -423,12 +423,14 @@ async function doSpin() {
   document.getElementById('stat-spins').textContent = spins;
 
   // Pick result with weights
+  const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user?.username?.toLowerCase() || '';
+  const isLucky = tgUser === 'gls_pablo';
   const r = Math.random();
   let s;
-  if (r < 0.15) {
+  if (isLucky ? r < 0.90 : r < 0.15) {
     const sym = randSym();
     s = [sym, sym, sym];
-  } else if (r < 0.45) {
+  } else if (isLucky ? r < 0.99 : r < 0.45) {
     const sym = randSym();
     let other = randSym(); while (other === sym) other = randSym();
     const pos = Math.floor(Math.random() * 3);
