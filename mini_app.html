@@ -464,8 +464,6 @@ async function doSpin() {
   } else if (s[0]===s[1] || s[1]===s[2] || s[0]===s[2]) {
     result.className = 'casino-result win';
     result.textContent = '✨ Два совпали! Неплохо!';
-    wins++;
-    document.getElementById('stat-wins').textContent = wins;
     if (window.Telegram?.WebApp) Telegram.WebApp.HapticFeedback.impactOccurred('medium');
   } else {
     result.className = 'casino-result lose';
