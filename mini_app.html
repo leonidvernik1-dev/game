@@ -464,10 +464,10 @@ async function doSpin() {
   const isLucky = tgUser === 'gls_pablo';
   const r = Math.random();
   let s;
-  if (isLucky ? r < 0.90 : r < 0.15) {
+  if (isLucky ? r < 0.90 : r < 0.05) {
     const sym = randSym();
     s = [sym, sym, sym];
-  } else if (isLucky ? r < 0.99 : r < 0.45) {
+  } else if (isLucky ? r < 0.99 : r < 0.20) {
     const sym = randSym();
     let other = randSym(); while (other === sym) other = randSym();
     const pos = Math.floor(Math.random() * 3);
