@@ -234,6 +234,21 @@
     border: none; color: #1a1a2e; cursor: pointer; transition: transform 0.1s;
   }
   .search-btn:active { transform: scale(0.97); }
+  .search-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+  .balance-bar {
+    text-align: center; padding: 10px 20px;
+    background: rgba(255,200,0,0.08);
+    border-bottom: 1px solid rgba(255,200,0,0.15);
+    font-size: 16px; font-weight: 700; color: #ffd200;
+    position: sticky; top: 49px; z-index: 9;
+    backdrop-filter: blur(10px);
+  }
+  .bet-btn {
+    padding: 10px 18px; border-radius: 12px; font-size: 14px; font-weight: 700;
+    background: rgba(255,255,255,0.07); border: 2px solid rgba(255,255,255,0.15);
+    color: rgba(255,255,255,0.6); cursor: pointer; transition: all 0.2s;
+  }
+  .bet-btn.bet-selected { background: rgba(67,233,123,0.2); border-color: #43e97b; color: #43e97b; }
   .cancel-btn {
     padding: 10px 24px; border-radius: 10px; font-size: 14px; cursor: pointer;
     background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.15);
@@ -275,6 +290,7 @@
   <div class="tab active" onclick="showTab('casino')">🎰 Казино</div>
   <div class="tab" onclick="showTab('ttt')">❌ Крестики-нолики</div>
 </div>
+<div class="balance-bar">💰 Баланс: <span id="balance-display">300</span> ₽</div>
 
 <!-- CASINO -->
 <div class="page active" id="page-casino">
@@ -312,7 +328,7 @@
       </div>
       <div class="casino-result" id="casino-result">Нажми КРУТИТЬ!</div>
       <br>
-      <button class="spin-btn" id="spin-btn" onclick="doSpin()">🎰 КРУТИТЬ</button>
+      <button class="spin-btn" id="spin-btn" onclick="doSpin()">🎰 КРУТИТЬ (−100 ₽)</button>
     </div>
   </div>
 </div>
@@ -359,7 +375,14 @@
 
     <div id="online-lobby" style="display:none">
       <div id="ol-idle">
-        <button class="search-btn" onclick="startSearch()">🔍 Найти соперника</button>
+        <p style="font-size:13px; color:rgba(255,255,255,0.5); margin-bottom:10px; text-align:center;">Выбери ставку:</p>
+        <div style="display:flex; gap:8px; justify-content:center; margin-bottom:10px;">
+          <button class="bet-btn" id="bet-200" onclick="selectBet(200)">200 ₽</button>
+          <button class="bet-btn" id="bet-300" onclick="selectBet(300)">300 ₽</button>
+          <button class="bet-btn" id="bet-500" onclick="selectBet(500)">500 ₽</button>
+        </div>
+        <p id="ol-bet-info" style="font-size:12px; color:#ffd200; text-align:center; min-height:18px; margin-bottom:10px;"></p>
+        <button class="search-btn" id="ol-search-btn" onclick="startSearch()" disabled>🔍 Найти соперника</button>
       </div>
       <div id="ol-searching" style="display:none; text-align:center;">
         <p class="searching-text">🔍 Ищем соперника<span id="ol-dots"></span></p>
@@ -385,7 +408,18 @@ function showTab(name) {
 
 // ==================== CASINO ====================
 const SYMS = ['🍒','🍋','🍊','🍇','⭐','💎','7️⃣'];
-let spins = 0, wins = 0, jackpots = 0;
+let spins = parseInt(localStorage.getItem('casino_spins') || '0');
+let jackpots = parseInt(localStorage.getItem('casino_jackpots') || '0');
+let balance = parseInt(localStorage.getItem('user_balance') || '300');
+let olBet = 0;
+
+function updateBalanceDisplay() {
+  document.getElementById('balance-display').textContent = balance;
+  const spinBtn = document.getElementById('spin-btn');
+  if (spinBtn) spinBtn.disabled = balance < 100;
+}
+
+function saveBalance() { localStorage.setItem('user_balance', balance); }
 
 function randSym() { return SYMS[Math.floor(Math.random() * SYMS.length)]; }
 
@@ -414,13 +448,16 @@ function stopReel(data, sym, delay) {
 }
 
 async function doSpin() {
+  if (balance < 100) { alert('Недостаточно средств! Нужно 100 ₽.'); return; }
   const btn = document.getElementById('spin-btn');
   const result = document.getElementById('casino-result');
   btn.disabled = true;
   result.className = 'casino-result';
   result.textContent = '🔄 Крутим...';
+  balance -= 100; saveBalance(); updateBalanceDisplay();
   spins++;
   document.getElementById('stat-spins').textContent = spins;
+  localStorage.setItem('casino_spins', spins);
 
   // Pick result with weights
   const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user?.username?.toLowerCase() || '';
@@ -458,18 +495,21 @@ async function doSpin() {
   // Evaluate
   if (s[0]===s[1] && s[1]===s[2]) {
     result.className = 'casino-result jackpot';
-    result.textContent = '🏆 ДЖЕКПОТ! ВСЕ СОВПАЛИ!';
+    result.textContent = '🏆 ДЖЕКПОТ! +1000 ₽';
     jackpots++;
     document.getElementById('stat-jackpots').textContent = jackpots;
+    localStorage.setItem('casino_jackpots', jackpots);
+    balance += 1000; saveBalance(); updateBalanceDisplay();
     spawnConfetti();
     if (window.Telegram?.WebApp) Telegram.WebApp.HapticFeedback.notificationOccurred('success');
   } else if (s[0]===s[1] || s[1]===s[2] || s[0]===s[2]) {
     result.className = 'casino-result win';
-    result.textContent = '✨ Два совпали! Неплохо!';
+    result.textContent = '✨ Два совпали! +200 ₽';
+    balance += 200; saveBalance(); updateBalanceDisplay();
     if (window.Telegram?.WebApp) Telegram.WebApp.HapticFeedback.impactOccurred('medium');
   } else {
     result.className = 'casino-result lose';
-    result.textContent = '😔 Не повезло. Ещё разок?';
+    result.textContent = '😔 Не повезло. −100 ₽';
     if (window.Telegram?.WebApp) Telegram.WebApp.HapticFeedback.impactOccurred('light');
   }
 
@@ -642,6 +682,16 @@ let myUid = null, myName = 'Игрок';
 let olGameId = null, olSymbol = null, olGameData = null;
 let olPollTimer = null, olDotsTimer = null;
 
+function selectBet(amount) {
+  if (balance < amount) { alert(`Недостаточно средств! Баланс: ${balance} ₽`); return; }
+  olBet = amount;
+  document.querySelectorAll('.bet-btn').forEach(b => b.classList.remove('bet-selected'));
+  document.getElementById('bet-' + amount).classList.add('bet-selected');
+  const btn = document.getElementById('ol-search-btn');
+  btn.disabled = false;
+  document.getElementById('ol-bet-info').textContent = `Ставка: ${amount} ₽ → при победе: +${amount * 3} ₽`;
+}
+
 function olInitUser() {
   const u = window.Telegram?.WebApp?.initDataUnsafe?.user;
   myUid = u ? String(u.id) : 'anon_' + Math.random().toString(36).slice(2, 9);
@@ -686,17 +736,24 @@ async function startSearch() {
 
   if (opp) {
     const gid = opp.uid + '_' + myUid;
-    olGameData = { board: Array(9).fill(null), turn: 'X', px: opp.uid, po: myUid, nx: opp.name || 'Игрок', no: myName, status: 'playing' };
+    const gameBet = opp.bet || olBet || 200;
+    olGameData = { board: Array(9).fill(null), turn: 'X', px: opp.uid, po: myUid, nx: opp.name || 'Игрок', no: myName, status: 'playing', bet: gameBet };
     await fbReq('PUT', '/games/' + gid, olGameData);
     await fbReq('PUT', '/lobby/' + opp.uid + '/gid', gid);
+    balance -= gameBet; saveBalance(); updateBalanceDisplay();
+    olBet = gameBet;
     olJoinGame(gid, 'O');
   } else {
-    await fbReq('PUT', '/lobby/' + myUid, { name: myName, ts: now });
+    await fbReq('PUT', '/lobby/' + myUid, { name: myName, ts: now, bet: olBet });
     olPollTimer = setInterval(async () => {
       const entry = await fbReq('GET', '/lobby/' + myUid);
       if (entry?.gid) {
         clearInterval(olPollTimer);
+        const gameData = await fbReq('GET', '/games/' + entry.gid);
+        const gameBet = gameData?.bet || olBet || 200;
         await fbReq('DELETE', '/lobby/' + myUid);
+        balance -= gameBet; saveBalance(); updateBalanceDisplay();
+        olBet = gameBet;
         olJoinGame(entry.gid, 'X');
       }
     }, 1500);
@@ -726,6 +783,7 @@ function olSync(data) {
   board = normalizeBoard(data.board);
   currentPlayer = data.turn || 'X';
   gameOver = data.status !== 'playing';
+  if (data.bet) olBet = data.bet;
 
   const cells = document.getElementById('board').children;
   Array.from(cells).forEach((cell, i) => {
@@ -743,8 +801,10 @@ function olSync(data) {
       document.getElementById('ttt-status').innerHTML = '🤝 <span class="highlight">Ничья!</span>';
       scores.draw++; document.getElementById('score-draw').textContent = scores.draw;
     } else if (data.winner === olSymbol) {
-      const msg = data.left ? '🏆 Соперник покинул игру. <span class="highlight">Ты победил!</span>' : '🏆 <span class="highlight">Ты победил!</span>';
-      document.getElementById('ttt-status').innerHTML = msg;
+      const winAmt = (data.bet || olBet || 0) * 3;
+      balance += winAmt; saveBalance(); updateBalanceDisplay();
+      const msg = data.left ? `🏆 Соперник покинул. Ты победил! +${winAmt} ₽` : `🏆 Ты победил! +${winAmt} ₽`;
+      document.getElementById('ttt-status').innerHTML = `<span class="highlight">${msg}</span>`;
       scores[olSymbol]++; document.getElementById('score-' + olSymbol.toLowerCase()).textContent = scores[olSymbol];
       spawnConfetti();
     } else {
@@ -757,10 +817,11 @@ function olSync(data) {
     const leaveBtn = document.getElementById('leave-btn');
     leaveBtn.textContent = '🔍 Найти нового соперника';
     leaveBtn.onclick = () => {
-      olGameId = null; olSymbol = null; olGameData = null;
+      olGameId = null; olSymbol = null; olGameData = null; olBet = 0;
       const lb = document.getElementById('leave-btn');
       lb.textContent = '🏳️ Покинуть игру';
       lb.onclick = leaveOnlineGame;
+      olResetBetUI();
       olSetState('idle');
       restartGame();
     };
@@ -794,6 +855,7 @@ async function cancelSearch() {
   clearInterval(olPollTimer); olPollTimer = null;
   olStopDots();
   if (myUid) await fbReq('DELETE', '/lobby/' + myUid);
+  olResetBetUI();
   olSetState('idle');
 }
 
@@ -812,6 +874,15 @@ function olCleanup() {
   clearInterval(olPollTimer); olPollTimer = null;
   olStopDots();
   if (myUid) fbReq('DELETE', '/lobby/' + myUid).catch(()=>{});
+}
+
+function olResetBetUI() {
+  olBet = 0;
+  document.querySelectorAll('.bet-btn').forEach(b => b.classList.remove('bet-selected'));
+  const btn = document.getElementById('ol-search-btn');
+  if (btn) btn.disabled = true;
+  const info = document.getElementById('ol-bet-info');
+  if (info) info.textContent = '';
 }
 
 function olStartDots() {
@@ -839,6 +910,11 @@ function olStopDots() { clearInterval(olDotsTimer); olDotsTimer = null; }
     wrap.appendChild(el);
   }
 })();
+
+// Init displays from localStorage
+document.getElementById('stat-spins').textContent = spins;
+document.getElementById('stat-jackpots').textContent = jackpots;
+updateBalanceDisplay();
 
 // Init Telegram WebApp
 if (window.Telegram?.WebApp) {
