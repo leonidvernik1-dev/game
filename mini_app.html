@@ -715,9 +715,15 @@ function olJoinGame(gid, symbol) {
   }, 1500);
 }
 
+function normalizeBoard(raw) {
+  if (!raw) return Array(9).fill(null);
+  if (Array.isArray(raw)) return Array.from({length: 9}, (_, i) => raw[i] || null);
+  return Array.from({length: 9}, (_, i) => raw[i] || null);
+}
+
 function olSync(data) {
   olGameData = data;
-  board = data.board || Array(9).fill(null);
+  board = normalizeBoard(data.board);
   currentPlayer = data.turn || 'X';
   gameOver = data.status !== 'playing';
 
@@ -762,7 +768,7 @@ async function olCellClick(idx) {
   if (board[idx] || currentPlayer !== olSymbol) return;
   if (window.Telegram?.WebApp) Telegram.WebApp.HapticFeedback.impactOccurred('light');
 
-  const nb = [...board]; nb[idx] = olSymbol;
+  const nb = normalizeBoard(board); nb[idx] = olSymbol;
   let winner = null, winLine = null;
   for (const [a, b, c] of WIN_LINES) {
     if (nb[a] && nb[a]===nb[b] && nb[b]===nb[c]) { winner = nb[a]; winLine = [a,b,c]; break; }
